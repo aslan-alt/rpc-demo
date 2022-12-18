@@ -1,7 +1,7 @@
 import struct
 from io import BytesIO
 import socket
-
+import threading
 
 # struct的格式请参考：https://docs.python.org/zh-cn/dev/library/struct.html
 class InvalidOperation(Exception):
@@ -216,6 +216,43 @@ class RPCServer(object):
                 print('客户端关闭了连接')
                 client_sock.close()
 
+class ThreadServer(object):
+    def __init__(self, host, post, handlers):
+        self.host = host
+        self.post = post
+        self.handlers = handlers
+        # 创建socket 的工具对象
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        # 设置socket 重用地址
+        sock.setsockopt(socket.SOL_SOCKET, socket.SOCK_STREAM, 1)
+        # 绑定地址
+        sock.bind((self.host, self.post))
+        self.sock = sock
+
+    def start(self):
+        # 开启服务器监听，等待客户端连接请求
+        self.sock.listen(128)
+        print('开始监听-------')
+        while True:
+            # 接受客户端的连接请求
+            client_sock, client_addr = self.sock.accept()
+            print('与客户端%s建立了连接' % str(client_addr))
+            # 创建子线程处理这个客户端
+            t = threading.Thread(target=self.handle,args=(client_sock,))
+            t.start()
+
+    def handle(self,client_sock):
+        # 子线程调用的方法，用来处理一个客户端的请求
+        # 交给ServerStub,完成客户端RPC调用请求
+        stub = ServerStub(client_sock, self.handlers)
+        try:
+            while True:
+                stub.process()
+        except EOFError:
+            # 表示客户端关闭了连接
+            print('客户端关闭了连接')
+            client_sock.close()
 
 # 用于帮助客户端完成远程调用
 class ClientStub(object):
