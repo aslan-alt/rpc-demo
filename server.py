@@ -185,9 +185,10 @@ class Channel(object):
 
 
 class RPCServer(object):
-    def __init__(self, host, post):
+    def __init__(self, host, post,handlers):
         self.host = host
         self.post = post
+        self.handlers = handlers
         # 创建socket 的工具对象
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -196,9 +197,77 @@ class RPCServer(object):
         # 绑定地址
         sock.bind((self.host, self.post))
         self.sock = sock
+    def server(self):
+        # 开启服务器监听，等待客户端连接请求
+        self.sock.listen(128)
+
+        while True:
+            # 接受客户端的连接请求
+            client_sock,client_addr = self.sock.accept()
+            print('与客户端%s建立了连接'% str(client_addr))
+            # 交给ServerStub,完成客户端RPC调用请求
+            stub = ServerStub(client_sock,self.handlers)
+            try:
+                while True:
+                    stub.process()
+            except EOFError:
+                # 表示客户端关闭了连接
+                print('客户端关闭了连接')
+                client_sock.close()
 
 
+# 用于帮助客户端完成远程调用
+class ClientStub(object):
+    def __init__(self, channel):
+        self.channel = channel
+        self.connection = channel.get_connection()
 
+    def divide(self, num1, num2=1):
+        # 将调用的参数打包成消息体
+        proto = DivideProtocol()
+        message = proto.args_encode(num1, num2)
+
+        # 将消息体通过网络发送给服务器
+        self.connection.sendall(message)
+        # 接受服务器返回的消息体，并进行解析
+        result = proto.result_decode(self.connection)
+        # 将结果（正常的值或者异常）返回给客户端
+        if isinstance(result, float):
+            return result
+        else:
+            raise result
+
+
+class ServerStub(object):
+    """当服务端接受了一个客户端的链接，建立好了连接后，完成远端调用处理"""
+
+    def __init__(self, connection,handlers):
+        self.connection = connection
+        self.method_proto = MethodProtocol(self.connection)
+        self.process_map = {
+            'divide': self._process_divide
+        }
+        # zhenzhen
+        self.handlers = handlers
+
+    def process(self):
+        # 接受消息体，解析方法的名字
+        name = self.method_proto.get_method_name()
+        # 解析参数
+        self.process_map[name]()
+
+    def _process_divide(self):
+        proto = DivideProtocol()
+        args = proto.args_decode(self.connection)
+
+        # 将结果打包成消息体返回给客户端
+        try:
+            # 调用本地过程
+            value = self.handlers.divide(**args)
+            result_message = proto.result_encode(value)
+        except InvalidOperation as e:
+            result_message = proto.result_encode(e)
+        self.connection.sendall(result_message)
 
 if __name__ == '__main__':
     # 构造消息体
