@@ -185,7 +185,7 @@ class Channel(object):
 
 
 class RPCServer(object):
-    def __init__(self, host, post,handlers):
+    def __init__(self, host, post, handlers):
         self.host = host
         self.post = post
         self.handlers = handlers
@@ -197,16 +197,17 @@ class RPCServer(object):
         # 绑定地址
         sock.bind((self.host, self.post))
         self.sock = sock
-    def server(self):
+
+    def start(self):
         # 开启服务器监听，等待客户端连接请求
         self.sock.listen(128)
-
+        print('开始监听-------')
         while True:
             # 接受客户端的连接请求
-            client_sock,client_addr = self.sock.accept()
-            print('与客户端%s建立了连接'% str(client_addr))
+            client_sock, client_addr = self.sock.accept()
+            print('与客户端%s建立了连接' % str(client_addr))
             # 交给ServerStub,完成客户端RPC调用请求
-            stub = ServerStub(client_sock,self.handlers)
+            stub = ServerStub(client_sock, self.handlers)
             try:
                 while True:
                     stub.process()
@@ -241,7 +242,7 @@ class ClientStub(object):
 class ServerStub(object):
     """当服务端接受了一个客户端的链接，建立好了连接后，完成远端调用处理"""
 
-    def __init__(self, connection,handlers):
+    def __init__(self, connection, handlers):
         self.connection = connection
         self.method_proto = MethodProtocol(self.connection)
         self.process_map = {
@@ -269,18 +270,18 @@ class ServerStub(object):
             result_message = proto.result_encode(e)
         self.connection.sendall(result_message)
 
-if __name__ == '__main__':
-    # 构造消息体
-    proto = DivideProtocol()
-    message = proto.args_encode(200, 100)
-
-    conn = BytesIO()
-    conn.write(message)
-    conn.seek(0)
-    # 解析消息数据
-    method_proto = MethodProtocol(conn)
-    name = method_proto.get_method_name()
-
-    args = proto.args_decode(conn)
-    print('args------------')
-    print(args)
+# if __name__ == '__main__':
+#     # 构造消息体
+#     proto = DivideProtocol()
+#     message = proto.args_encode(200, 100)
+#
+#     conn = BytesIO()
+#     conn.write(message)
+#     conn.seek(0)
+#     # 解析消息数据
+#     method_proto = MethodProtocol(conn)
+#     name = method_proto.get_method_name()
+#
+#     args = proto.args_decode(conn)
+#     print('args------------')
+#     print(args)
